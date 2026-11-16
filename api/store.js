@@ -1,8 +1,23 @@
 // Shared app data (settings, drafts, sent orders…) so the phone app and the website show the same thing.
 // Stored in a Redis database (Upstash) connected through Vercel Storage.
 const { authed } = require('../lib/auth');
-const db = require('../lib/db');
-const URL_ = db.url, TOKEN = db.token;
+
+// ---- finds the Redis (Upstash) connection however Vercel named the variables ----
+const env = process.env;
+const envNames = () => Object.keys(env);
+const dbUrl = () => {
+  if (env.SHOHNATY_DB_URL) return env.SHOHNATY_DB_URL.replace(/\/+$/, '');
+  const k = envNames().find(n => /(KV|REDIS)_REST_(API_)?URL$/.test(n) && env[n]);
+  if (k) return env[k].replace(/\/+$/, '');
+  const v = envNames().map(n => env[n]).find(x => /^https:\/\/[^\s]*upstash\.io\/?$/.test(x || ''));
+  return v ? v.replace(/\/+$/, '') : '';
+};
+const dbToken = () => {
+  if (env.SHOHNATY_DB_TOKEN) return env.SHOHNATY_DB_TOKEN;
+  const k = envNames().find(n => /REST.*TOKEN$|^(KV|REDIS|UPSTASH).*TOKEN$/.test(n) && !/READ_ONLY/.test(n) && env[n]);
+  return k ? env[k] : '';
+};
+const URL_ = dbUrl, TOKEN = dbToken;
 const HASH = 'shohnaty';
 async function redis(cmds) {
   const r = await fetch(URL_() + '/pipeline', { method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN(), 'Content-Type': 'application/json' }, body: JSON.stringify(cmds) });
