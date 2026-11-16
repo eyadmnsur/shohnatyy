@@ -1,0 +1,13 @@
+{
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/hz/:path*",
+      "destination": "/api/proxy?kind=hz&path=:path*"
+    },
+    {
+      "source": "/sp/:host/:path*",
+      "destination": "/api/proxy?kind=sp&host=:host&path=:path*"
+    }
+  ]
+}
