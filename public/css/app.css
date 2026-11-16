@@ -246,3 +246,5 @@ input.switch:checked::after { inset-inline-start: 21px; }
 
 .ord-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: #1a6fd4; text-decoration: underline; cursor: pointer; text-align: start; }
 .ord-link:disabled { opacity: .6; }
+
+.dd-h { font-size: 11.5px; color: var(--text-3); font-weight: 700; padding: 10px 10px 4px; border-top: 1px solid var(--border); margin-top: 4px; }

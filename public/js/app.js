@@ -123,12 +123,7 @@ async function viewHome() {
   v.innerHTML = `
     <div class="chips">${[['today', 'اليوم'], ['7', 'آخر 7 أيام'], ['30', 'آخر 30 يوم'], ['90', 'آخر 3 شهور']].map(([k, l]) => `<button class="chip ${state.period === k ? 'on' : ''}" data-p="${k}">${l}</button>`).join('')}</div>
     <div class="tiny" id="updatedAt" style="margin:-4px 4px 8px">بيحدّث من موقع حازم…</div>
-    <div id="shopCard"></div>
     <div class="stats" id="stats">${['', '', '', '', ''].map((_, i) => `<div class="stat ${i === 0 ? 'wide' : ''}"><div class="skeleton" style="width:60%"></div><div class="skeleton" style="width:40%;height:22px;margin-top:8px"></div></div>`).join('')}</div>
-    <div id="postCard"></div>
-    <div id="payAlerts"></div>
-    <div class="section-title">المرتجعات والرفض</div>
-    <div class="card card-pad" id="retCard"><div class="skeleton" style="width:70%"></div><div class="skeleton" style="width:50%;margin-top:8px"></div></div>
     <div class="section-title">إجراءات سريعة</div>
     <div class="card card-pad"><div class="actions">
       <button class="action" data-a="add">${ic('plus')}شحنة جديدة</button>
@@ -136,6 +131,11 @@ async function viewHome() {
       <button class="action" data-a="export">${ic('download')}تنزيل إكسيل</button>
       <button class="action" data-a="wao">${ic('whatsapp')}أوردر واتساب</button>
     </div></div>
+    <div id="shopCard"></div>
+    <div id="payAlerts"></div>
+    <div id="postCard"></div>
+    <div class="section-title">المرتجعات والرفض</div>
+    <div class="card card-pad" id="retCard"><div class="skeleton" style="width:70%"></div><div class="skeleton" style="width:50%;margin-top:8px"></div></div>
     <div class="section-title">آخر التحديثات</div>
     <div id="recent">${loading()}</div>`;
   $$('.chip', v).forEach(c => c.onclick = () => { state.period = c.dataset.p; viewHome(); });
@@ -146,7 +146,7 @@ async function viewHome() {
     const cats = ['active', 'delivered', 'returned', 'postponed'];
     // What happened in the period = shipments whose status changed in it (not when they were created).
     const sr = { sfrom: range.from, sto: range.to };
-    const [all, created, ...res] = await Promise.all([Hazem.count(sr), Hazem.count({ ...range }), ...cats.map(c => Hazem.count({ ...sr, status: STATUS[c] }))]);
+    const [all, created, full, part, ...res] = await Promise.all([Hazem.count(sr), Hazem.count({ ...range }), Hazem.count({ ...sr, status: STATUS.full }), Hazem.count({ ...sr, status: STATUS.partial }), ...cats.map(c => Hazem.count({ ...sr, status: STATUS[c] }))]);
     const c = Object.fromEntries(cats.map((k, i) => [k, res[i]]));
     const closed = c.delivered.count + c.returned.count;
     const rate = closed ? Math.round(c.delivered.count / closed * 100) : 0;
@@ -158,8 +158,10 @@ async function viewHome() {
         <div style="text-align:left"><div class="lbl" style="justify-content:flex-end">نسبة التسليم</div><div class="num" style="color:${CAT_COLOR.delivered}">${rate}%</div></div></div>
         <div class="rate-bar">${cats.map(k => `<span style="width:${all.count ? c[k].count / all.count * 100 : 0}%;background:${CAT_COLOR[k]}"></span>`).join('')}</div>
       </div>
-      ${cats.map(k => `<button class="stat" data-cat="${k}"><div class="lbl"><i style="background:${CAT_COLOR[k]}"></i>${CATEGORY_LABEL[k]}</div><div class="num">${c[k].count.toLocaleString('en')}</div><div class="sub">${money(c[k].total)} ج.م</div></button>`).join('')}`;
-    $$('#stats [data-cat]').forEach(b => b.onclick = () => { state.shipFilter = b.dataset.cat; go('ships'); });
+      ${cats.map(k => `<button class="stat" data-cat="${k}"><div class="lbl"><i style="background:${CAT_COLOR[k]}"></i>${CATEGORY_LABEL[k]}</div><div class="num">${c[k].count.toLocaleString('en')}</div><div class="sub">${money(c[k].total)} ج.م</div></button>`).join('')}
+      <button class="stat" data-cat="full"><div class="lbl"><i style="background:#1f8a4c"></i>✅ تسليم ناجح كامل</div><div class="num">${full.count.toLocaleString('en')}</div><div class="sub">${money(full.total)} ج.م اتحصّلت كاملة</div></button>
+      <button class="stat" data-cat="partial"><div class="lbl"><i style="background:#e0a100"></i>🧩 تسليم جزئي</div><div class="num">${part.count.toLocaleString('en')}</div><div class="sub">راجع المبلغ المحصّل</div></button>`;
+    $$('#stats [data-cat]').forEach(b => b.onclick = () => { state.shipFilter = b.dataset.cat; state.shipRange = { from: range.from, to: range.to }; go('ships'); });
   } catch (e) { $('#stats').innerHTML = ''; handleErr(e); }
   loadReturnsCard(range);
   loadPostponedCard();
@@ -260,8 +262,9 @@ async function loadReturnsCard(range) {
       <div class="row between"><div><div class="lbl small muted">مرتجعات في الفترة</div><div class="num" style="font-size:22px;font-weight:700">${rets.length}</div></div>
       <div style="text-align:left"><div class="small muted">شحن اتدفع / المفروض</div><div style="font-weight:700">${money(paid)} / ${money(fee)} ج.م</div></div></div>
       <div class="row wrap" style="gap:6px;margin-top:8px">${short ? `<span class="badge canary">${short} دفعوا أقل من الشحن</span>` : ''}${none ? `<span class="badge critical">${none} مدفعوش شحن</span>` : ''}${fee - paid > 0 ? `<span class="badge">خسارة شحن ${money(fee - paid)} ج.م</span>` : ''}</div>
-      <div id="topReasons" style="margin-top:10px"><div class="tiny">بحمّل أسباب الرفض…</div></div>`;
-    card.onclick = () => { state.shipFilter = 'returned'; state.shipRange = range; go('ships'); };
+      <div id="topReasons" style="margin-top:10px"><div class="tiny">بحمّل أسباب الرفض…</div></div>
+      <button class="btn block" id="retXl" style="margin-top:10px">${ic('download')} شيت المرتجعات إكسيل</button>`;
+    card.onclick = e => { if (e.target.closest('#retXl')) { state.shipRange = range; return openReturnsReport(); } state.shipFilter = 'returned'; state.shipRange = range; go('ships'); };
     const counts = {};
     await pool(failed.slice(0, 40), 3, async s => { const r = await reasonFor(s); const k = r.reason || 'بدون سبب مكتوب'; counts[k] = (counts[k] || 0) + 1; });
     const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
@@ -537,7 +540,10 @@ async function deleteSelected(list) {
   }
 }
 
-const SHIP_FILTERS = [['all', 'الكل'], ['pickup', '📦 بيك أب'], ['dups', '⚠️ المكرر'], ['active', '🚚 قيد التشغيل'], ['delivered', '✅ تم التسليم'], ['returned', '↩️ مرفوض / مرتجع'], ['shortship', '💸 دفع شحن أقل'], ['postponed', '📅 مؤجل'], ['cancelled', '✕ ملغي']];
+const SHIP_FILTERS = [['all', 'الكل'],
+  ['--1', 'قبل التسليم'], ['pickup', '📦 بيك أب'], ['active', '🚚 قيد التشغيل'], ['postponed', '📅 مؤجل'], ['dups', '⚠️ المكرر'],
+  ['--2', 'التسليم'], ['full', '✅ تسليم ناجح كامل'], ['partial', '🧩 تسليم جزئي'], ['delivered', 'كل التسليمات'],
+  ['--3', 'المرتجعات والإلغاء'], ['returned', '↩️ مرفوض / مرتجع'], ['shortship', '💸 دفع شحن أقل'], ['cancelled', '✕ ملغي']];
 // Search by: [key, label, placeholder, row fields used for the instant on-screen filter]
 const SEARCH_BY = [
   ['auto', 'كل الحقول', 'بوليصة، رقم طلب، اسم، موبايل…', r => [r.waybill, r.consignee, r.phone1, r.phone2, r.order_id, r.area, r.address, r.product, r.client_code]],
@@ -567,7 +573,7 @@ const SORTS = [
 function dropdown(anchor, items, current, onPick, title = '') {
   $('.dd-wrap')?.remove();
   const wrap = document.createElement('div'); wrap.className = 'dd-wrap';
-  wrap.innerHTML = `<div class="dd">${title ? `<div class="dd-t">${esc(title)}</div>` : ''}${items.map(([k, l, , extra]) => `<button class="dd-i ${k === current ? 'on' : ''}" data-k="${esc(k)}"><span class="grow">${esc(l)}</span>${extra != null && typeof extra !== 'function' ? `<span class="tiny">${esc(extra)}</span>` : ''}${k === current ? ic('check', 'width="18"') : ''}</button>`).join('')}</div>`;
+  wrap.innerHTML = `<div class="dd">${title ? `<div class="dd-t">${esc(title)}</div>` : ''}${items.map(([k, l, , extra]) => String(k).startsWith('--') ? `<div class="dd-h">${esc(l)}</div>` : `<button class="dd-i ${k === current ? 'on' : ''}" data-k="${esc(k)}"><span class="grow">${esc(l)}</span>${extra != null && typeof extra !== 'function' ? `<span class="tiny">${esc(extra)}</span>` : ''}${k === current ? ic('check', 'width="18"') : ''}</button>`).join('')}</div>`;
   document.body.appendChild(wrap);
   const r = anchor.getBoundingClientRect(), dd = $('.dd', wrap);
   dd.style.top = Math.min(r.bottom + 6, innerHeight - dd.offsetHeight - 70) + 'px';
@@ -963,7 +969,7 @@ function sectorPicker(current, onPick) {
   const render = q => {
     const n = normAr(q);
     const list = state.sectors.filter(s => !n || normAr(s.label).includes(n)).slice(0, 80);
-    $('#secL', sh.el).innerHTML = list.map(s => `<button class="item" data-id="${s.id}"><div class="grow"><b>${esc(s.area)}</b><div class="meta">${esc(s.gov)}</div></div>${s.id === current ? ic('check', 'width="20"') : ''}</button>`).join('') || '<div class="empty small">مفيش نتايج</div>';
+    $('#secL', sh.el).innerHTML = list.map(s => `<button class="item" data-id="${s.id}"><div class="grow"><b>${esc(s.area)}</b><div class="meta">${esc(s.gov)}${s.cost ? ' · شحن ' + esc(s.cost) + ' ج.م' : ''}</div></div>${s.id === current ? ic('check', 'width="20"') : ''}</button>`).join('') || '<div class="empty small">مفيش نتايج</div>';
     $$('#secL .item', sh.el).forEach(b => b.onclick = () => { onPick(state.sectors.find(s => s.id === b.dataset.id)); sh.close(); });
   };
   $('#secQ', sh.el).oninput = e => render(e.target.value); render('');
@@ -985,14 +991,24 @@ async function openAdd(prefill = null, onDone = null) {
     <div class="card card-pad">
       <div class="h2" style="margin-bottom:10px">بيانات الشحنة</div>
       <div class="field"><label>اسم المنتج</label><textarea data-k="product_name" style="min-height:52px">${esc(v.product_name)}</textarea></div>
-      <div class="row"><div class="field grow"><label>مبلغ التحصيل (شامل الشحن) *</label><input data-k="price" inputmode="decimal" value="${esc(v.price)}"></div>
+      <div class="row"><div class="field grow"><label>قيمة الأوردر (من غير شحن)</label><input id="goodsVal" inputmode="decimal" placeholder="مثال: 1400" value="${v.price && sec?.cost && num(v.price) > num(sec.cost) ? esc(String(num(v.price) - num(sec.cost))) : ''}"></div>
+      <div class="field" style="width:110px"><label>الشحن</label><input id="shipFee" inputmode="decimal" value="${esc(sec?.cost || '')}"></div></div>
+      <div class="tiny" id="feeHint" style="margin:-4px 2px 8px">${sec?.cost ? `شحن ${esc(sec.area)} عند حازم: ${esc(sec.cost)} ج.م` : 'اختار المنطقة والشحن يتحط لوحده من أسعار حازم'}</div>
+      <div class="row"><div class="field grow"><label>مبلغ التحصيل (الإجمالي شامل الشحن) *</label><input data-k="price" inputmode="decimal" value="${esc(v.price)}" style="font-weight:700"></div>
       <div class="field" style="width:90px"><label>العدد</label><input data-k="quantity" inputmode="numeric" value="${esc(v.quantity)}"></div></div>
       <div class="row"><div class="field grow"><label>نوع الخدمة</label><select data-k="service_type">${state.services.map(s => `<option value="${s.id}" ${s.id === v.service_type ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}</select></div>
       <div class="field" style="width:110px"><label>رقم الطلب</label><input data-k="order_id" value="${esc(v.order_id)}"></div></div>
       <div class="field"><label>ملاحظات</label><textarea data-k="notes" style="min-height:52px">${esc(v.notes)}</textarea></div>
-    </div>`;
+    </div>
+    ${!onDone && Shopify.ready ? `<label class="card card-pad row" style="gap:10px;align-items:center"><input type="checkbox" id="addToShop" class="switch" checked><span class="grow"><b>سجّله أوردر في شوبيفاي كمان</b><div class="tiny">يتسجل أول ما الشحنة تتبعت لحازم، ورقم الأوردر يتحط على الشحنة</div></span></label>` : ''}`;
+  // Total = order value + shipping. Shipping comes from the courier's price for the chosen area.
+  const priceEl = $('[data-k=price]', sh.el), goodsEl = $('#goodsVal', sh.el), feeEl = $('#shipFee', sh.el);
+  const recalc = () => { const g = num(goodsEl.value); if (goodsEl.value.trim() && g > 0) priceEl.value = String(Math.round((g + num(feeEl.value)) * 100) / 100); };
+  goodsEl.oninput = recalc; feeEl.oninput = recalc;
   $('#secBtn', sh.el).onclick = () => sectorPicker($('[data-k=sector_id]', sh.el).value, s => {
     $('[data-k=sector_id]', sh.el).value = s.id; $('#secBtn span', sh.el).textContent = s.area + ' - ' + s.gov;
+    if (s.cost !== '' && s.cost != null) { feeEl.value = s.cost; $('#feeHint', sh.el).textContent = `شحن ${s.area} عند حازم: ${s.cost} ج.م`; recalc(); }
+    else $('#feeHint', sh.el).textContent = 'حازم مش محدد سعر شحن للمنطقة دي — اكتبه بنفسك';
   });
   async function submit(btn) {
     const vals = {}; $$('[data-k]', sh.el).forEach(el => vals[el.dataset.k] = el.value.trim());
@@ -1001,9 +1017,36 @@ async function openAdd(prefill = null, onDone = null) {
     if (miss) return toast('ناقص: ' + miss[1], 'err');
     if (!/^01[0125]\d{8}$/.test(vals.phone_1)) return toast('رقم الموبايل لازم يكون 11 رقم ويبدأ بـ 01', 'err');
     if (onDone) { onDone(vals); sh.close(); return; }
+    // No money to collect = an exchange (or return pick-up): the courier needs the matching service type.
+    if (num(vals.price) === 0 && vals.service_type === '1') {
+      if (confirm('مبلغ التحصيل 0 — ده استبدال؟\nموافق = نوع الخدمة يبقى «استبدال»\nإلغاء = يفضل «تسليم وتحصيل»')) { vals.service_type = '2'; $('[data-k=service_type]', sh.el).value = '2'; }
+    }
     btn.disabled = true; btn.innerHTML = '<div class="spinner"></div>';
-    try { await Hazem.addShipment(vals, state.addBase); toast('تمت إضافة الشحنة', 'ok'); sh.close(); }
-    catch (e) { btn.disabled = false; btn.textContent = 'إضافة الشحنة'; handleErr(e); }
+    let order = null;
+    try {
+      // Register it in Shopify first, so the shipment carries the Shopify order number.
+      if ($('#addToShop', sh.el)?.checked && !vals.order_id) {
+        const sc = state.sectors.find(x => x.id === vals.sector_id) || {};
+        const qty = Math.max(1, Math.round(num(vals.quantity)) || 1), goods = num(goodsEl.value) || Math.max(0, num(vals.price) - num(feeEl.value));
+        order = await Shopify.createOrder({ ...vals, _city: sc.area, _gov: sc.gov }, [{ name: vals.product_name || 'منتج', quantity: qty, unit_price: Math.round(goods / qty * 100) / 100 }], ['manual', TAG_WA, TAG_SENT]);
+        vals.order_id = order.name.replace('#', '');
+      }
+      const html = await Hazem.addShipment(vals, state.addBase);
+      let msg = 'تمت إضافة الشحنة';
+      const mine = r => vals.order_id ? r.order_id === vals.order_id : (normAr(r.consignee) === normAr(vals.client_name) && String(r.date || '').startsWith(ymd(new Date())));
+      const found = (await Hazem.shipments(vals.order_id ? { order_id: vals.order_id, items: 20 } : { phone: vals.phone_1, items: 20 }).catch(() => [])).find(mine);
+      if (!found) throw new Error('حازم مسجّلش الشحنة دي' + (pageAlert(html) ? ': ' + pageAlert(html) : ' (من غير رسالة خطأ). غالبًا بسبب مبلغ التحصيل 0 أو نوع الخدمة — جرّب «استبدال»'));
+      if (order) {
+        if (found) { await Shopify.tag(order.id, ['HZM-' + found.waybill]).catch(() => {}); state.sentMap[order.name] = { waybill: found.waybill, id: found.id, price: vals.price }; await Store.set('sent_map', state.sentMap); }
+        msg += ` واتسجلت في شوبيفاي ${order.name} ✓`;
+      }
+      toast(msg, 'ok'); sh.close();
+      if (state.tab === 'ships') loadShipments();
+    } catch (e) {
+      // The courier refused the shipment: don't leave an orphan order in Shopify.
+      if (order) { await Shopify.cancel(order.id).catch(() => {}); vals.order_id = ''; }
+      btn.disabled = false; btn.textContent = 'إضافة الشحنة'; handleErr(e);
+    }
   }
 }
 
@@ -1043,6 +1086,7 @@ async function renderReady() {
     const since = new Date(); since.setHours(0, 0, 0, 0); since.setDate(since.getDate() - (fw - 1));
     orders = orders.filter(o => { const f = (o.fulfillments || []).map(x => x.createdAt).sort().pop(); return f && new Date(f) >= since; });
   }
+  if (Hazem.creds) orders = await autoLinkRegistered(orders);
   state.orders = orders.map(o => {
     const base = orderToShipment(o, state.sectors || []);
     const ov = state.overrides[o.name];
@@ -1069,12 +1113,13 @@ async function renderReady() {
           <div class="row between"><span class="title">${esc(o.name)} · ${esc(s.client_name)}</span><span class="amount">${money(s.price)} <span class="tiny">ج.م</span></span></div>
           <div class="meta ellipsis">${esc(s.product_name)}</div>
           <div class="row wrap" style="margin-top:6px;gap:6px">${areaBadge}${phoneBadge}${o.displayFinancialStatus === 'PAID' ? '<span class="badge info">مدفوع أونلاين</span>' : ''}<span class="tiny">${new Date(o.createdAt).toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'short' })}</span></div>
-        </div></div>`;
+        </div><button class="icon-btn" data-more="${i}" aria-label="خيارات">${ic('gear')}</button></div>`;
     }).join('')}</div>
     <div style="height:70px"></div>
     <div class="bottom-bar"><button class="btn accent" id="shipBtn" ${state.selected.size ? '' : 'disabled'}>${ic('truck')}ابعت ${state.selected.size || ''} لحازم حلان</button></div>`;
   $$('[data-fw]', body).forEach(b => b.onclick = () => { state.fulfWindow = Number(b.dataset.fw); state.selected = new Set(); $('#shopBody').innerHTML = loading(); renderReady(); });
   $('#selAll').onclick = () => { state.selected = allSel ? new Set() : new Set(state.orders.map(x => x.o.name)); renderReady(); };
+  $$('[data-more]', body).forEach(b => b.onclick = e => { e.stopPropagation(); openShopOrder(state.orders[b.dataset.more].o, 'ready', () => renderReady()); });
   $$('[data-sel]', body).forEach(c => c.onclick = e => { e.stopPropagation(); const n = state.orders[c.dataset.sel].o.name; state.selected.has(n) ? state.selected.delete(n) : state.selected.add(n); renderReadyQuick(); });
   $$('[data-open]', body).forEach(c => c.onclick = () => {
     const x = state.orders[c.dataset.open];
@@ -1107,6 +1152,7 @@ async function renderConfirm() {
     }).join('')}</div>`;
   $$('[data-wa]', body).forEach(b => b.onclick = () => { const o = orders[b.dataset.wa]; waCompose({ order: o }, 'confirm', async k => { await markWa(o.name, k); renderConfirm(); }); });
   $$('[data-ok]', body).forEach(b => b.onclick = () => confirmOrder(orders[b.dataset.ok], b));
+  bindConfirmList(body, orders, () => { state.confSel = new Set(); $('#confBar')?.remove(); renderConfirm(); });
   if ($('#waQueue')) $('#waQueue').onclick = () => waQueue(pending);
 }
 // Customer confirmed -> mark Fulfilled on Shopify so it moves to "ready to ship".
@@ -1223,8 +1269,16 @@ async function renderSent() {
         <div class="meta row between"><span class="ltr">${esc(waybill || '')}</span><span>${esc(ship?.area || '')}</span></div>
         <div style="margin-top:6px">${ship ? statusBadge(ship) : '<span class="badge">مش لاقي الشحنة</span>'}</div>
       </div></button>`).join('')}</div>`;
-  $$('#shopBody .item').forEach(b => b.onclick = () => { const x = state.sent[b.dataset.i]; if (x.ship) openShipment(x.ship); });
+  $$('#shopBody .item').forEach(b => b.onclick = () => { const x = state.sent[b.dataset.i]; if (x.ship) openShipment(x.ship); else openOrphanOrder(x.o); });
   if ($('#syncBtn')) $('#syncBtn').onclick = () => syncShopify(toSync);
+}
+// An order tagged "sent" whose shipment can't be found on the courier's site.
+function openOrphanOrder(o) {
+  const sh = sheet(o.name, `
+    <div class="banner warning" style="display:block"><b>مفيش شحنة على حازم ليه الأوردر ده.</b><div class="small">يعني الشحنة ماتسجلتش عند الشركة (أو اتمسحت). تقدر ترجّعه لقايمة الأوردرات وتبعته تاني، أو تلغيه.</div></div>
+    <div class="card"><dl class="kv"><dt>العميل</dt><dd>${esc(o.shippingAddress?.name || '')}</dd><dt>المبلغ</dt><dd>${money(o.currentTotalPriceSet?.shopMoney?.amount)} ج.م</dd><dt>الحالة</dt><dd>${esc(o.displayFinancialStatus || '')}</dd></dl></div>`,
+    [['رجّعه لقايمة الأوردرات', async b => { b.disabled = true; try { await Shopify.untag(o.id, [TAG_SENT, ...o.tags.filter(t => t.startsWith('HZM-'))]); toast('اتشالت العلامة — هيرجع لقايمة الأوردرات', 'ok'); sh.close(); viewShop(); } catch (e) { b.disabled = false; handleErr(e); } }, 'primary'],
+     ['إلغاء الأوردر على شوبيفاي', async b => { if (!confirm(`تلغي ${o.name} على شوبيفاي؟`)) return; b.disabled = true; try { await Shopify.cancel(o.id); await Shopify.untag(o.id, [TAG_SENT]).catch(() => {}); toast('اتلغى', 'ok'); sh.close(); viewShop(); } catch (e) { b.disabled = false; handleErr(e); } }]]);
 }
 async function syncShopify(list) {
   const sh = sheet('تحديث المتجر', `<div class="card card-pad"><div class="progress"><span id="pg" style="width:0"></span></div><div class="log" id="plog" style="margin-top:10px"></div></div>`, [['تم', () => { sh.close(); viewShop(); }, 'primary']]);
@@ -1232,11 +1286,15 @@ async function syncShopify(list) {
   for (let i = 0; i < list.length; i++) {
     const { o, ship } = list[i];
     try {
-      if (ship.category === 'delivered') {
+      if (STATUS.full.includes(Number(ship.statusId))) {
         await Shopify.fulfill(o.id, ship.waybill);
         if (o.displayFinancialStatus !== 'PAID') await Shopify.markPaid(o.id);
         await Shopify.tag(o.id, [TAG_DELIVERED]);
-        log(`✅ ${esc(o.name)}: اتسلّم — اتعلّم اتشحن ومدفوع`);
+        log(`✅ ${esc(o.name)}: اتسلّم كامل — اتعلّم اتشحن ومدفوع`);
+      } else if (ship.category === 'delivered') {
+        await Shopify.fulfill(o.id, ship.waybill);
+        await Shopify.tag(o.id, [TAG_DELIVERED, 'hazem-partial']);
+        log(`🧩 ${esc(o.name)}: ${esc(ship.status)} — اتعلّم اتشحن بس، <b>متعلّمش مدفوع</b> (راجع المبلغ)`);
       } else {
         await Shopify.tag(o.id, [TAG_RETURNED]);
         log(`↩️ ${esc(o.name)}: ${esc(ship.status)} — اتعلّم مرتجع`);
@@ -1305,11 +1363,11 @@ async function viewMoney() {
       <div class="stat"><div class="lbl"><i style="background:${CAT_COLOR.active}"></i>مصاريف شحن التسليم</div><div class="num">${money(pair('تسليم ناجح').amount)}</div><div class="sub">${pair('تسليم ناجح').count} شحنة</div></div>
       <div class="stat"><div class="lbl"><i style="background:${CAT_COLOR.returned}"></i>مصاريف المرتجعات</div><div class="num">${money(pair('مرتجعات').amount)}</div><div class="sub">${pair('مرتجعات').count} شحنة</div></div>
     </div>
-    <div class="chips">${MONEY_FILTERS.map(([k, l, fn]) => { const n = bal.ops.filter(fn).length; return `<button class="chip ${state.moneyFilter === k ? 'on' : ''}" data-mf="${k}">${l} (${n})</button>`; }).join('')}</div>
+    <div class="toolbar"><button class="tb" id="mfBtn" style="flex:1"></button></div>
     <div id="opsList"></div>
     <p class="tiny" style="text-align:center">كل العمليات (${bal.ops.length}) من صفحة الرصيد على حازم حلان · العملية بتنزل هنا لما الشركة تقفل حساب الشحنة</p>`;
   // Each category is independent: switching clears the selection.
-  $$('[data-mf]', v).forEach(b => b.onclick = () => { state.moneyFilter = b.dataset.mf; state.opSel = null; $$('[data-mf]', v).forEach(x => x.classList.toggle('on', x === b)); renderOps(); });
+  moneyBar();
   renderOps();
   syncRecentOps(bal, v);
 }
@@ -1330,7 +1388,7 @@ async function syncRecentOps(bal, v) {
     for (const o of extra) if (!have.has(key(o))) { have.add(key(o)); bal.ops.push(o); }
     for (const o of bal.ops) if (o.waybill && upd[o.waybill]) o.shipDate = upd[o.waybill];
     bal.ops.sort((a, b) => opTime(b) - opTime(a));
-    $$('[data-mf]', v).forEach(b => { const f = MONEY_FILTERS.find(x => x[0] === b.dataset.mf); if (f) b.textContent = `${f[1]} (${bal.ops.filter(f[2]).length})`; });
+    moneyBar();
     if (!state.opSel?.size) renderOps();
   } catch {}
 }
@@ -1344,18 +1402,32 @@ function shipShort(o) {
   return paid > 0 && paid < o.fee ? o.fee - paid : 0;
 }
 // Independent categories in the Accounts tab: [key, label, test].
+// A delivery the courier closed in full: not partial / exchange, and nothing short of the order value.
+const isFullDelivery = o => !o.isReturn && !o.isPayout && !!o.waybill && !/جزئي|استبدال/.test(o.type) && o.value > 0 && !isProblemOp(o) && !(shipShort(o) > 0);
 const MONEY_FILTERS = [
   ['all', 'كل العمليات', () => true],
-  ['payout', '💵 التوريدات', o => o.isPayout],
-  ['nopay', 'مدفعش شحن', o => o.isReturn && o.paid <= 0],
-  ['short', 'دفع شحن أقل', o => shipShort(o) > 0],
+  ['--1', 'التسليم'],
+  ['full', '✅ تسليم ناجح كامل', isFullDelivery],
+  ['partial', '🧩 تسليم جزئي', o => /جزئي/.test(o.type)],
   ['under', 'تحصيل أقل من الأوردر', o => !o.isReturn && !/جزئي/.test(o.type) && isProblemOp(o)],
-  ['partial', 'تسليم جزئي', o => /جزئي/.test(o.type)],
+  ['deliver', 'كل عمليات التسليم', o => !o.isReturn && !o.isPayout && !!o.waybill],
+  ['--2', 'المرتجعات'],
+  ['short', '💸 دفع شحن أقل', o => shipShort(o) > 0],
+  ['nopay', 'مدفعش شحن', o => o.isReturn && o.paid <= 0],
   ['return', 'كل المرتجعات', o => o.isReturn],
-  ['deliver', 'تسليم', o => !o.isReturn && !o.isPayout && !!o.waybill],
+  ['--3', 'التوريدات'],
+  ['payout', '💵 التوريدات', o => o.isPayout],
 ];
+const moneyCat = () => MONEY_FILTERS.find(x => x[0] === state.moneyFilter && x[2]) || MONEY_FILTERS[0];
+function moneyBar() {
+  const b = $('#mfBtn'); if (!b || !state.balance) return;
+  const cat = moneyCat();
+  b.innerHTML = `<span class="tiny">عرض</span><b>${esc(cat[1])} (${state.balance.ops.filter(cat[2]).length})</b> ▾`;
+  b.classList.toggle('on', cat[0] !== 'all');
+  b.onclick = e => dropdown(e.currentTarget, MONEY_FILTERS.map(([k, l, fn]) => [k, l, null, fn ? String(state.balance.ops.filter(fn).length) : null]), cat[0], k => { state.moneyFilter = k; state.opSel = null; moneyBar(); renderOps(); }, 'اعرض');
+}
 function renderOps() {
-  const cat = MONEY_FILTERS.find(x => x[0] === state.moneyFilter) || MONEY_FILTERS[0];
+  const cat = moneyCat();
   const ops = state.balance.ops.filter(cat[2]);
   const box = $('#opsList'); if (!box) return;
   state.opsShown = ops;
@@ -1413,7 +1485,7 @@ function renderOpBar() {
   if (!state.opSel || state.tab !== 'money') return;
   const bar = document.createElement('div'); bar.id = 'opBar'; bar.className = 'sel-bar'; document.body.appendChild(bar);
   const n = state.opSel.size;
-  const cat = MONEY_FILTERS.find(x => x[0] === state.moneyFilter) || MONEY_FILTERS[0];
+  const cat = moneyCat();
   const all = state.opsShown.filter(o => o.waybill);
   const allOn = all.length && all.every(o => state.opSel.has(o));
   bar.innerHTML = `
@@ -1432,22 +1504,26 @@ function viewMore() {
     <div class="card card-pad row"><div class="brand" style="margin:0"><div class="logo" style="width:44px;height:44px">${ic('truck')}</div></div><div class="grow"><b>حسابي على حازم حلان</b><div class="small muted ltr" style="text-align:right">${esc(user)}</div></div></div>
     <div class="section-title">الشحنات</div>
     <div class="list menu">
-      ${menuItem('plus', 'إضافة شحنة يدوي', 'add')}${menuItem('upload', 'رفع شيت إكسيل', 'upload')}${menuItem('download', 'تنزيل الشحنات إكسيل', 'export')}${menuItem('web', 'فتح الموقع', 'site')}
+      ${menuItem('plus', 'إضافة شحنة يدوي', 'add')}${menuItem('upload', 'رفع شيت إكسيل', 'upload')}${menuItem('download', 'تنزيل الشحنات إكسيل', 'export')}${menuItem('file', 'شيت المرتجعات (إكسيل للمراجعة)', 'retsheet')}${menuItem('web', 'فتح الموقع', 'site')}
     </div>
-    <div class="section-title">المتجر</div>
-    <div class="list menu">${menuItem('bag', Shopify.ready ? 'إعدادات ربط شوبيفاي' : 'ربط متجر شوبيفاي', 'shop')}${menuItem('whatsapp', 'واتساب والرسايل الجاهزة', 'wa')}${menuItem('gear', 'ربط الذكاء الاصطناعي (Claude / Gemini)', 'ai')}</div>
-    <div class="section-title">البيانات</div>
-    <div class="list menu">${menuItem('refresh', 'المزامنة بين الموبايل والموقع', 'sync')}${menuItem('download', 'نسخ البيانات يدويًا', 'backup')}</div>
+    <div class="section-title">متجر شوبيفاي</div>
+    <div class="list menu">${menuItem('bag', Shopify.ready ? 'إعدادات ربط شوبيفاي' : 'ربط متجر شوبيفاي', 'shop')}
+      <label class="item" style="align-items:center"><span class="ico">${ic('check')}</span><span class="grow"><b>علّم الأوردر «مدفوع» تلقائي</b><div class="tiny">لما الشركة تسجّل تسليم ناجح كامل (مش جزئي)</div></span><input type="checkbox" id="autoPaidToggle" class="switch"></label></div>
+    <div class="section-title">أوردرات واتساب وماسنجر</div>
+    <div class="list menu">${menuItem('plus', 'أوردر جديد من الشات (صور أو نص)', 'wao')}${menuItem('whatsapp', 'واتساب والرسايل الجاهزة', 'wa')}${menuItem('gear', 'الذكاء الاصطناعي لقراءة الشات (Claude / Gemini)', 'ai')}
+      <label class="item" style="align-items:center"><span class="ico">${ic('bag')}</span><span class="grow"><b>سجّلها كأوردرات على شوبيفاي كمان</b><div class="tiny">عشان كل المبيعات والتقارير تبقى في مكان واحد</div></span><input type="checkbox" id="waShopToggle" class="switch"></label></div>
     <div class="section-title">التنبيهات</div>
     <div class="list menu">${menuItem('bell', 'مركز التنبيهات', 'center')}${menuItem('alert', 'إعدادات التنبيهات (مرتجع، تأجيل، دفع أقل، أوردرات…)', 'alerts')}</div>
-    <div class="section-title">أوردرات واتساب وماسنجر</div>
-    <div class="list menu"><label class="item" style="align-items:center"><span class="ico">${ic('bag')}</span><span class="grow"><b>سجّلها كأوردرات على شوبيفاي كمان</b><div class="tiny">عشان كل المبيعات والتقارير تبقى في مكان واحد</div></span><input type="checkbox" id="waShopToggle" class="switch"></label></div>
+    <div class="section-title">البيانات والمزامنة</div>
+    <div class="list menu">${menuItem('refresh', 'المزامنة بين الموبايل والموقع', 'sync')}${menuItem('download', 'نسخ البيانات يدويًا', 'backup')}</div>
+    <div class="section-title">الحساب</div>
     <div class="list menu">${menuItem('logout', 'تسجيل الخروج', 'logout')}</div>
-    <p class="tiny" style="text-align:center">شحناتي · الإصدار 3.12</p>`;
-  const acts = { add: () => openAdd(), upload: openUpload, export: () => go('ships'), site: () => window.open(HH_REAL + '/admin-area/index.php', '_blank'), shop: openShopSettings, wa: openWaSettings, wao: openWaOrders, ai: () => openAiSettings(), backup: openBackup, sync: openSyncSetup, center: openAlertCenter, alerts: openAlertSettings,
+    <p class="tiny" style="text-align:center">شحناتي · الإصدار 4.4</p>`;
+  const acts = { add: () => openAdd(), upload: openUpload, export: () => go('ships'), site: () => window.open(HH_REAL + '/admin-area/index.php', '_blank'), shop: openShopSettings, wa: openWaSettings, wao: openWaOrders, ai: () => openAiSettings(), backup: openBackup, retsheet: openReturnsReport, sync: openSyncSetup, center: openAlertCenter, alerts: openAlertSettings,
     logout: async () => { if (!confirm('تسجيل الخروج؟')) return; await Hazem.logout(); await Store.del('creds'); renderLogin(); } };
   $$('.menu [data-m]').forEach(b => b.onclick = acts[b.dataset.m]);
   Store.get('wa_to_shopify', true).then(v => { const t = $('#waShopToggle'); if (!t) return; t.checked = v !== false; t.onchange = () => Store.set('wa_to_shopify', t.checked); });
+  Store.get('auto_paid', true).then(v => { const t = $('#autoPaidToggle'); if (!t) return; t.checked = v !== false; t.onchange = async () => { await Store.set('auto_paid', t.checked); toast(t.checked ? 'اتفعّل — هيتعلّم مدفوع تلقائي' : 'اتقفل'); if (t.checked) autoMarkPaid(true); }; });
 }
 const menuItem = (icon, label, k) => `<button class="item" data-m="${k}"><span class="ico">${ic(icon)}</span><span class="grow" style="font-weight:600">${label}</span>${ic('chev', 'class="chev"')}</button>`;
 

@@ -119,6 +119,10 @@ const Shopify = {
     const e = m.orderUpdate.userErrors[0]; if (e) throw new Error(e.message);
   },
 
+  async untag(id, tags) {
+    const d = await this.gql(`mutation($id:ID!,$t:[String!]!){ tagsRemove(id:$id, tags:$t){ userErrors { message } } }`, { id, t: tags });
+    const e = d.tagsRemove.userErrors[0]; if (e) throw new Error(e.message);
+  },
   // Cancels an order (used when a chat order is deleted before shipping); no refund, no customer email.
   async cancel(orderId) {
     const m = await this.gql(`mutation($id:ID!){ orderCancel(orderId:$id, reason:OTHER, refund:false, restock:true, notifyCustomer:false){ orderCancelUserErrors { message } } }`, { id: orderId });

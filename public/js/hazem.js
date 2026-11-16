@@ -14,6 +14,9 @@ const STATUS = {
 STATUS.active = [1, 2, 3, 4, 16, 17, 23, 26, 28, 29, 32, 33, 34, 35, 36, 100, 115, 120, 121, 122, 125, 330, 400, 450];
 // Waiting for the courier to collect from the store: pickup requested / pickup assigned.
 STATUS.pickup = [1, 36, 330];
+// The courier's own split of a delivery: 5 = delivered in full, 18 / 21 = partial delivery / partial return.
+STATUS.full = [5];
+STATUS.partial = [18, 21];
 const inFilter = (r, f) => f === 'all' || (STATUS[f] ? STATUS[f].includes(Number(r.statusId)) : r.category === f);
 
 function statusCategory(id) {
